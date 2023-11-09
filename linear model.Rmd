@@ -56,6 +56,92 @@ fit |>
   knitr::kable(digits = 3)
 ```
 
+#quick look at diagnostics
+```{r}
+nyc_airbnb |>
+  modelr::add_residuals(fit) |>
+  ggplot(aes(x = price, y = resid)) + 
+  geom_violin()
+```
+
+
+```{r}
+nyc_airbnb |> 
+  modelr::add_residuals(fit) |> 
+  ggplot(aes(x = stars, y = resid)) + geom_point()
+```
+
+# Hypothesis testing
+
+fit a "null" and "alternative" model
+```{r}
+fit_null = lm(price ~ stars + borough, data = nyc_airbnb)
+fit_alt = lm(price ~ stars + borough + room_type, data = nyc_airbnb)
+
+```
+
+
+```{r}
+anova(fit_null, fit_alt) |> 
+  broom::tidy()
+
+```
+
+## Borough-level differences
+```{r}
+fit=
+  nyc_airbnb |> 
+  lm(price ~ stars * borough + room_type * borough, data = _)
+
+fit |>
+  broom::tidy()
+```
+
+```{r}
+airbnb_lm= function(df){
+  lm(price~stars+ room_type, data=df)
+}
+
+nest_lm_res =
+nyc_airbnb |>
+  nest(df = -borough) |>
+  mutate(
+    models = map(df,airbnb_lm),
+    results = map(models, broom::tidy)) |>
+  select(-df, -models) |> 
+  unnest(results)
+
+```
+
+```{r}
+nest_lm_res |> 
+  select(borough, term, estimate) |> 
+  mutate(term = fct_inorder(term)) |> 
+  pivot_wider(
+    names_from = term,
+    values_from = estimate) |> 
+  knitr::kable(digits = 3)
+```
+
+```{r}
+
+
+```
+
+
+```{r}
+
+
+```
+
+
+```{r}
+
+
+```
+
+
+
 ```{r}
 
 
@@ -79,27 +165,10 @@ fit |>
 
 ```
 
-
 ```{r}
 
 
 ```
 
-```{r}
-
-
-```
-
-```{r}
-
-
-```
-
-
-
-
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
 
 

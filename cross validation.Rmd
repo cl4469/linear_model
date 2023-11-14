@@ -59,10 +59,57 @@ rmse(smooth_mod, train_df)
 rmse(wiggly_mod, train_df)
 ```
 
-
 ```{r}
 rmse(linear_mod, test_df)
 rmse(smooth_mod, test_df)
 rmse(wiggly_mod, test_df)
 ```
 
+## use model for CV
+```{r}
+cv_df = 
+  crossv_mc(nonlin_df, 100) 
+```
+
+```{r}
+cv_df |> pull(train) |> nth(1) |> as_tibble()
+
+cv_df |> pull(test) |> nth(1) |> as_tibble()
+
+cv_df =
+  cv_df |> 
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble))
+```
+
+```{r}
+lin_mod_function = function(df){
+  lm(y~x,data=df)
+}
+
+cv_results = 
+  cv_df |>
+  mutate(
+    linear_fit=map(train,\(df)lm(y~x,data =df)),
+    smooth_fit= map(train, ~mgcv::gam(y ~ s(x), data = .x)),
+    wiggly_fit  = map(train, ~gam(y ~ s(x, k = 30), sp = 10e-6, data = .x))
+  ) |>
+  mutate(
+    rmse_linear = map2_dbl(linear_fit, test, \(mod,df)rmse(mod,df)),
+    rmse_smooth = map2_dbl(smooth_fit, test, ~rmse(model = .x, data = .y)),
+    rmse_wiggly = map2_dbl(wiggly_fit, test, ~rmse(model = .x, data = .y)))
+```
+
+```{r}
+cv_results |> 
+  select(starts_with("rmse")) |> 
+  pivot_longer(
+    everything(),
+    names_to = "model_type", 
+    values_to = "rmse",
+    names_prefix = "rmse_") |>
+  mutate(model = fct_inorder(model_type)) |> 
+  ggplot(aes(x = model, y = rmse)) + geom_violin()
+
+```

@@ -61,12 +61,126 @@ boot_sample(sim_df_nonconst) |>
   stat_smooth(method = "lm")
 ```
 
-
+## Draw a lot of samples and analyse them
 ```{r}
+boot_straps = 
+  tibble(strap_number = 1:1000) |> 
+  mutate(
+    strap_sample = map(strap_number, \(i) boot_sample(df = sim_df_nonconst))
+  )
 
+boot_straps |> 
+  slice(1:3) |> 
+  mutate(strap_sample = map(strap_sample, arrange, x)) |> 
+  pull(strap_sample)
 ```
 
+let's do the `lm` fit
+```{r}
+bootstrap_results = 
+  boot_straps |> 
+  mutate(
+    models = map(strap_sample, \(df) lm(y ~ x, data = df) ),
+    results = map(models, broom::tidy)) |> 
+  select(-strap_sample, -models) |> 
+  unnest(results) 
+```
+
+summarize these results
+```{r}
+bootstrap_results |> 
+  group_by(term) |> 
+  summarize(boot_se = sd(estimate)) |> 
+  knitr::kable(digits = 3)
+```
+
+look at the distribution
+```{r}
+bootstrap_results |> 
+  filter(term== "x") |>
+  ggplot(aes(x=estimate))
+  geom_density()
+```
+
+can I construct a CI
+```{r} 
+bootstrap_results |> 
+  group_by(term) |> 
+  summarize(
+    ci_lower = quantile(estimate, 0.025), 
+    ci_upper = quantile(estimate, 0.975))
+```
 
 ```{r}
+boot_straps |> 
+  unnest(strap_sample) |> 
+  ggplot(aes(x = x, y = y)) + 
+  geom_line(aes(group = strap_number), stat = "smooth", method = "lm", se = FALSE, alpha = .1, color = "blue") +
+  geom_point(data = sim_df_nonconst, alpha = .5)
+```
 
+##Airbnb
+```{r}
+data("nyc_airbnb")
+
+nyc_airbnb = 
+  nyc_airbnb |> 
+  mutate(stars = review_scores_location / 2) |> 
+  rename(
+    borough = neighbourhood_group,
+    neighborhood = neighbourhood) |> 
+  filter(borough != "Staten Island") |> 
+  drop_na(price, stars) |> 
+  select(price, stars, borough, neighborhood, room_type)
+```
+
+let's fit a regession of `price` on other variables and look at residuals
+
+```{r}
+airbnb_fit =
+  nyc_airbnb |>
+  lm(price~stars+room_type+borough, data=_ )
+```
+
+```{r}
+nyc_airbnb |>
+  modelr::add_residuals(airbnb_fit) |>
+  ggplot(aes(x=stars,y=resid))+
+  geom_point()
+```
+
+rum abootstrap on this whole thing to get estimates for the effect of `stars` on `price`
+
+```{r}
+manhattan_df=
+  nyc_airbnb |>
+  filter(borough == "Manhattan")
+  
+boot_result =
+  tibble(strap_number =1:1000) |>
+  mutate(
+    strap_sample =map(strap_number,\(i)boot_sample(manhattan_df)),
+    models = map(strap_sample, \(df) lm(price ~ stars + room_type, data = df)),
+    results = map(models, broom::tidy)
+  )|>
+  select(strap_number, results) |> 
+  unnest(results) 
+
+# boot_results |>
+#  filter(term == "stars") |> 
+#  ggplot(aes(x = estimate)) + 
+#  geom_density()
+```
+
+```{r}
+nyc_airbnb |> 
+  filter(borough == "Manhattan") |> 
+  modelr::bootstrap(n = 1000) |> 
+  mutate(
+    models = map(strap, \(df) lm(price ~ stars + room_type, data = df)),
+    results = map(models, broom::tidy)) |> 
+  select(results) |> 
+  unnest(results) |> 
+  filter(term == "stars") |> 
+  ggplot(aes(x = estimate)) + geom_density()
 ```
